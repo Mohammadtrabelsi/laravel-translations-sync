@@ -1,0 +1,39 @@
+{
+    "name": "rizqengine/laravel-translation-sync",
+    "description": "Scan your Laravel app (views, Livewire components, services and laravel-modules) for translation keys and sync them across every locale with a single artisan command.",
+    "keywords": [
+        "laravel",
+        "translations",
+        "localization",
+        "i18n",
+        "lang",
+        "artisan",
+        "livewire",
+        "laravel-modules"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "RizqEngine"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/console": "^11.0||^12.0||^13.0",
+        "illuminate/support": "^11.0||^12.0||^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "RizqEngine\\TranslationSync\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "RizqEngine\\TranslationSync\\TranslationSyncServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
