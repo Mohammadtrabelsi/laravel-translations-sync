@@ -1,6 +1,6 @@
 <?php
 
-namespace RizqEngine\TranslationSync\Console\Commands;
+namespace Mohammadtrabelsi\TranslationSync\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;

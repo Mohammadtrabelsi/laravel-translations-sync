@@ -1,9 +1,9 @@
 <?php
 
-namespace RizqEngine\TranslationSync;
+namespace Mohammadtrabelsi\TranslationSync;
 
 use Illuminate\Support\ServiceProvider;
-use RizqEngine\TranslationSync\Console\Commands\SyncTranslationKeys;
+use Mohammadtrabelsi\TranslationSync\Console\Commands\SyncTranslationKeys;
 
 class TranslationSyncServiceProvider extends ServiceProvider
 {
