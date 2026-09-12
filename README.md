@@ -18,7 +18,7 @@ every locale so nothing is left untranslated.
 ## Installation
 
 ```bash
-composer require rizqengine/laravel-translation-sync
+composer require mohammadtrabelsi/laravel-translation-sync
 ```
 
 The service provider is auto-discovered, so there is nothing else to register.
