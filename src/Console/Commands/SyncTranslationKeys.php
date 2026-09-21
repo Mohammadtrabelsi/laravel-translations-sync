@@ -225,6 +225,12 @@ class SyncTranslationKeys extends Command
                 $subKey = $key;
             }
 
+            // Skip keys that produce an empty group or an empty sub-key to
+            // avoid writing entries like '' => '[TODO] ...' into the file.
+            if ($group === '' || $subKey === '') {
+                continue;
+            }
+
             $grouped[$group][$subKey] = null; // null = placeholder
         }
 
