@@ -3,6 +3,7 @@
 namespace Mohammadtrabelsi\TranslationSync\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 
 class SyncTranslationKeys extends Command
@@ -225,6 +226,18 @@ class SyncTranslationKeys extends Command
                 $subKey = $key;
             }
 
+            // Skip keys that produce an empty group or an empty sub-key to
+            // avoid writing entries like '' => '[TODO] ...' into the file.
+            if ($group === '' || $subKey === '') {
+                continue;
+            }
+
+            // Skip partial keys built at runtime, e.g. __('admin.fields.'.$name)
+            // is captured as "admin.fields." — it has an empty nested segment.
+            if ($this->isNested($group, $subKey) && in_array('', explode('.', $subKey), true)) {
+                continue;
+            }
+
             $grouped[$group][$subKey] = null; // null = placeholder
         }
 
@@ -267,28 +280,43 @@ class SyncTranslationKeys extends Command
         $added = [];
         $removed = [];
 
+        // Fold flat dotted entries (e.g. 'fields.name' => '…', written by older
+        // versions) into their nested form, so 'fields' => ['name' => '…'] is used.
+        $existing = $this->foldDottedKeys($group, $existing, $removed);
+
         // Add missing keys
         foreach (array_keys($expectedKeys) as $key) {
-            if (! array_key_exists($key, $existing)) {
-                // For the base locale use the key, replacing underscores with spaces and capitalizing the first letter.
-                // For other locales, use the base translation wrapped in [TODO].
-                $transformedKey = ucfirst(str_replace('_', ' ', $key));
-                $placeholder = $locale === $base
-                    ? $transformedKey
-                    : ('[TODO] '.($baseValues[$key] ?? $transformedKey));
-                $existing[$key] = $placeholder;
-                $added[] = $key;
+            if ($this->hasKey($group, $existing, (string) $key)) {
+                continue;
             }
+
+            if ($this->isNested($group, (string) $key) && $this->blockedByScalar($existing, (string) $key)) {
+                $this->warn("     ⚠ Skipped {$group}.{$key}: a parent key already holds a string value.");
+
+                continue;
+            }
+
+            // For the base locale use the (last segment of the) key, replacing underscores with
+            // spaces and capitalizing the first letter.
+            // For other locales, use the base translation wrapped in [TODO].
+            $label = $this->isNested($group, (string) $key) ? Arr::last(explode('.', (string) $key)) : (string) $key;
+            $transformedKey = ucfirst(str_replace('_', ' ', $label));
+            $baseValue = Arr::get($baseValues, $key);
+            $placeholder = $locale === $base
+                ? $transformedKey
+                : ('[TODO] '.(is_string($baseValue) ? $baseValue : $transformedKey));
+
+            if ($this->isNested($group, (string) $key)) {
+                Arr::set($existing, $key, $placeholder);
+            } else {
+                $existing[$key] = $placeholder;
+            }
+            $added[] = $key;
         }
 
         // Optionally remove stale keys
         if ($doClean) {
-            foreach (array_keys($existing) as $existingKey) {
-                if (! array_key_exists($existingKey, $expectedKeys)) {
-                    unset($existing[$existingKey]);
-                    $removed[] = $existingKey;
-                }
-            }
+            $existing = $this->removeStaleKeys($existing, $expectedKeys, '', $removed);
         }
 
         if ($added === [] && $removed === []) {
@@ -313,7 +341,7 @@ class SyncTranslationKeys extends Command
         }
 
         // Sort keys for clean diffs
-        ksort($existing);
+        $this->sortRecursive($existing);
 
         // Write file
         $content = "<?php\n\nreturn ".$this->arrayToString($existing).";\n";
@@ -323,6 +351,109 @@ class SyncTranslationKeys extends Command
         }
 
         File::put($filePath, $content);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Nested key helpers
+    // ──────────────────────────────────────────────────────────────────────────
+
+    // Dotted sub-keys are stored as nested arrays ("fields.name" →
+    // 'fields' => ['name' => …]), matching how Laravel resolves them. The
+    // "strings" group and sub-keys containing whitespace hold full sentences,
+    // so they stay flat.
+    private function isNested(string $group, string $key): bool
+    {
+        return $group !== 'strings' && str_contains($key, '.') && ! preg_match('/\s/', $key);
+    }
+
+    private function hasKey(string $group, array $existing, string $key): bool
+    {
+        if (array_key_exists($key, $existing)) {
+            return true;
+        }
+
+        return $this->isNested($group, $key) && Arr::has($existing, $key);
+    }
+
+    // True when a parent segment of $key is already a string, so nesting
+    // under it would overwrite an existing translation.
+    private function blockedByScalar(array $existing, string $key): bool
+    {
+        $node = $existing;
+
+        foreach (explode('.', $key) as $segment) {
+            if (! is_array($node)) {
+                return true;
+            }
+            if (! array_key_exists($segment, $node)) {
+                return false;
+            }
+            $node = $node[$segment];
+        }
+
+        return false;
+    }
+
+    private function foldDottedKeys(string $group, array $existing, array &$removed): array
+    {
+        foreach ($existing as $key => $value) {
+            if (! is_string($key) || ! $this->isNested($group, $key)) {
+                continue;
+            }
+
+            unset($existing[$key]);
+
+            if (Arr::has($existing, $key)) {
+                // The nested entry already exists — the flat one is a duplicate.
+                $removed[] = $key;
+            } elseif ($this->blockedByScalar($existing, $key)) {
+                $existing[$key] = $value; // keep as-is rather than lose a value
+            } else {
+                Arr::set($existing, $key, $value);
+            }
+        }
+
+        return $existing;
+    }
+
+    private function removeStaleKeys(array $existing, array $expectedKeys, string $prefix, array &$removed): array
+    {
+        foreach ($existing as $key => $value) {
+            $path = $prefix.$key;
+
+            // Keep the entry if it is used directly (this also keeps whole
+            // sub-arrays fetched at once, e.g. __('office.fields')).
+            if (array_key_exists($path, $expectedKeys)) {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $value = $this->removeStaleKeys($value, $expectedKeys, $path.'.', $removed);
+                if ($value === []) {
+                    unset($existing[$key]);
+                } else {
+                    $existing[$key] = $value;
+                }
+
+                continue;
+            }
+
+            unset($existing[$key]);
+            $removed[] = $path;
+        }
+
+        return $existing;
+    }
+
+    private function sortRecursive(array &$array): void
+    {
+        ksort($array);
+
+        foreach ($array as &$value) {
+            if (is_array($value)) {
+                $this->sortRecursive($value);
+            }
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────────
