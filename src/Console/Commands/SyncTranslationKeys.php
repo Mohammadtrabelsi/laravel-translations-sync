@@ -157,7 +157,12 @@ class SyncTranslationKeys extends Command
             }
         }
 
-        return array_values(array_filter(array_keys($allKeys), fn (string $k): bool => $k !== ''));
+        // Skip empty keys and dynamic keys built from variables, e.g. __("$key")
+        // or __("menu.{$item}") — they can't be resolved statically.
+        return array_values(array_filter(
+            array_keys($allKeys),
+            fn (string $k): bool => $k !== '' && ! str_contains($k, '$')
+        ));
     }
 
     // ──────────────────────────────────────────────────────────────────────────
