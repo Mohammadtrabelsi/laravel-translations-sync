@@ -58,6 +58,18 @@ Keys are grouped by their file prefix:
 - `__('auth.failed')` → `lang/{locale}/auth.php` under the `failed` key.
 - `__('Hello world')` (a plain string with no group) → `lang/{locale}/strings.php`.
 
+Further dots nest the key, the same way Laravel resolves it:
+
+- `__('office.fields.name')` → `lang/{locale}/office.php` as `'fields' => ['name' => …]`.
+- `__('settings.admin.fields.temperature')` → `lang/{locale}/settings.php` as
+  `'admin' => ['fields' => ['temperature' => …]]`.
+
+Keys that are already translated in nested form are detected and left alone.
+Flat dotted entries such as `'fields.name' => '…'` (written by older versions)
+are folded into the nested array, or dropped when the nested entry already
+exists. Partial keys built at runtime, like `__('admin.fields.'.$field)`, are
+skipped.
+
 For the base locale a missing key gets a human-friendly placeholder derived from
 the key itself (`welcome_back` → `Welcome back`). For other locales the missing
 value is prefixed with `[TODO]` and seeded from the base translation so you can
