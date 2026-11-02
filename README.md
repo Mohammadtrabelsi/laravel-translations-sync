@@ -23,6 +23,13 @@ composer require mohammadtrabelsi/laravel-translation-sync
 
 The service provider is auto-discovered, so there is nothing else to register.
 
+> **Upgrading from a local copy of the command?** Delete your own
+> `app/Console/Commands/SyncTranslationKeys.php` (or any other command with the
+> `translations:sync` signature). Laravel runs the app's command instead of the
+> package's, so older behaviour, such as writing flat `'group.key' => '[TODO] …'`
+> entries next to nested arrays, would keep happening. The package prints a
+> warning when it detects such an override.
+
 ## Usage
 
 ```bash
